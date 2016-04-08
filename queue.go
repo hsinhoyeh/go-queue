@@ -39,11 +39,6 @@ type Queue interface {
 	Done(*Job) error
 }
 
-// RedisQueue holds a redis.client to impl Queue interface
-type RedisQueue struct {
-	client *redis.Client
-}
-
 // NewRedisQueue creates and returns an instance of *RedisQueue from the endpoints given
 func NewRedisQueueFromEndpoint(endpoints ...string) (*RedisQueue, error) {
 	if len(endpoints) != 1 {
@@ -57,14 +52,34 @@ func NewRedisQueueFromEndpoint(endpoints ...string) (*RedisQueue, error) {
 		WriteTimeout: 30 * time.Second,
 	})
 
-	return NewRedisQueue(client), nil
+	return NewNamedRedisQueue(client, defaultName), nil
 
+}
+
+const (
+	defaultName = "default"
+)
+
+// RedisQueue holds a redis.client to impl Queue interface
+type RedisQueue struct {
+	client *redis.Client
+	name   string
 }
 
 // NewRedisQueue creates and returns an instance of *RedisQueue
 func NewRedisQueue(client *redis.Client) *RedisQueue {
 	return &RedisQueue{
 		client: client,
+		name:   defaultName,
+	}
+}
+
+// NewNamedRedisQueue returns an *RedisQueue with the name given
+// all jobs will go to that namespace
+func NewNamedRedisQueue(client *redis.Client, name string) *RedisQueue {
+	return &RedisQueue{
+		client: client,
+		name:   name,
 	}
 }
 
@@ -74,7 +89,7 @@ func (r *RedisQueue) Enqueue(j *Job) error {
 	if err != nil {
 		return err
 	}
-	jkey := MakeJobKey(j.ID)
+	jkey := MakeJobKey(r.name, j.ID)
 
 	// send job blob to redis
 	if err := r.client.HMSet(jkey,
@@ -84,7 +99,7 @@ func (r *RedisQueue) Enqueue(j *Job) error {
 	}
 
 	// then add signal with brpop
-	if err := r.client.LPush(MakeQueueName(), jkey).Err(); err != nil {
+	if err := r.client.LPush(MakeQueueName(r.name), jkey).Err(); err != nil {
 		return err
 	}
 	return nil
@@ -103,7 +118,7 @@ func (r *RedisQueue) Dequeue() (*Job, error) {
 	// TODO: we may lost job id when worker poped jid then dead
 	// need to have a resignal process
 
-	replies, err := r.client.BRPop(dequeTimeout, MakeQueueName()).Result()
+	replies, err := r.client.BRPop(dequeTimeout, MakeQueueName(r.name)).Result()
 	if err != nil {
 		if err == redis.Nil {
 			return nil, ErrNoJob
@@ -134,7 +149,7 @@ func (r *RedisQueue) Dequeue() (*Job, error) {
 
 // Retry resignal the job
 func (r *RedisQueue) Retry(j *Job) error {
-	if err := r.client.LPush(MakeQueueName(), MakeJobKey(j.ID)).Err(); err != nil {
+	if err := r.client.LPush(MakeQueueName(r.name), MakeJobKey(r.name, j.ID)).Err(); err != nil {
 		return err
 	}
 	return nil
@@ -142,17 +157,17 @@ func (r *RedisQueue) Retry(j *Job) error {
 
 // Done marks "done" tag to the job
 func (r *RedisQueue) Done(j *Job) error {
-	return r.client.Del(MakeJobKey(j.ID)).Err()
+	return r.client.Del(MakeJobKey(r.name, j.ID)).Err()
 }
 
-// MakeQueueName defines a global queue name
-func MakeQueueName() string {
-	return "/jq/queue"
+// MakeQueueName defines a queue name
+func MakeQueueName(jobType string) string {
+	return fmt.Sprintf("/jq/queue/%s", jobType)
 }
 
 // MakeJobKey is a helper function to create a job key according to job id
-func MakeJobKey(jid string) string {
-	return fmt.Sprintf("/jq/%s", jid)
+func MakeJobKey(name string, jid string) string {
+	return fmt.Sprintf("/jq/j/%s/%s", name, jid)
 }
 
 // NewJobID is a helper function to create a random JobID
