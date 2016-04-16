@@ -27,6 +27,7 @@ func TestQueue(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		assert.NoError(t, rQueue.Done(j))
 		gotJobs = append(gotJobs, j)
 	}
 	assert.True(t, reflect.DeepEqual(totalJobs, gotJobs))
@@ -38,6 +39,33 @@ func TestDequeNoJob(t *testing.T) {
 
 	_, err = rQueue.Dequeue()
 	assert.Equal(t, ErrNoJob, err)
+}
+
+func TestRetryJobs(t *testing.T) {
+	rQueue, err := NewRedisQueueFromEndpoint("localhost:6379")
+	assert.NoError(t, err)
+
+	totalJobs := jobs()
+	for _, j := range totalJobs {
+		err := rQueue.Enqueue(j)
+		assert.NoError(t, err)
+	}
+
+	for _ = range totalJobs {
+		j, err := rQueue.Dequeue()
+		assert.NoError(t, err)
+		// retry count is 0
+		assert.EqualValues(t, 0, j.RetriedCount)
+		assert.NoError(t, rQueue.Retry(j))
+	}
+
+	for _ = range totalJobs {
+		j, err := rQueue.Dequeue()
+		assert.NoError(t, err)
+		// retry count is 1
+		assert.EqualValues(t, 1, j.RetriedCount)
+		assert.NoError(t, rQueue.Done(j))
+	}
 }
 
 func jobs() []*Job {

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"hash/fnv"
+	"strconv"
 	"time"
 
 	"github.com/satori/go.uuid"
@@ -12,9 +13,10 @@ import (
 )
 
 type Job struct {
-	ID        string
-	Data      []byte
-	CreatedAt uint64 // in second
+	ID           string `json:"id"`
+	Data         []byte `json:"data"`
+	CreatedAt    uint64 `json:"created_at"` // in second
+	RetriedCount int32  `json:"retried_count"`
 }
 
 func (j *Job) Marshal() ([]byte, error) {
@@ -83,6 +85,12 @@ func NewNamedRedisQueue(client *redis.Client, name string) *RedisQueue {
 	}
 }
 
+const (
+	FieldBlob    = "blob"
+	FieldRetried = "retried_count"
+	FieldJID     = "jid"
+)
+
 // Enqueue pushes a job into the queue
 func (r *RedisQueue) Enqueue(j *Job) error {
 	jobBlob, err := j.Marshal()
@@ -92,9 +100,14 @@ func (r *RedisQueue) Enqueue(j *Job) error {
 	jkey := MakeJobKey(r.name, j.ID)
 
 	// send job blob to redis
+	// we stored the data in a hset, where
+	// "blob": marshal byte slice of job
+	// "jid": the job id
+	// "retried_count": # counts for current retried
 	if err := r.client.HMSet(jkey,
-		"blob", string(jobBlob),
-		"jid", j.ID).Err(); err != nil {
+		FieldBlob, string(jobBlob),
+		FieldRetried, fmt.Sprintf("%d", j.RetriedCount),
+		FieldJID, j.ID).Err(); err != nil {
 		return err
 	}
 
@@ -133,23 +146,37 @@ func (r *RedisQueue) Dequeue() (*Job, error) {
 	jKey := replies[1]
 	_ = queueName
 
-	resp, err := r.client.HMGet(jKey, "blob").Result()
+	resp, err := r.client.HMGet(jKey, FieldBlob, FieldRetried).Result()
 	if err != nil {
 		if err == redis.Nil {
 			return nil, ErrNoJob
 		}
 		return nil, err
 	}
+	if len(resp) != 2 {
+		return nil, errors.New("insufficient response")
+	}
+	// decode job
 	j := &Job{}
 	if err := j.Unmarshal([]byte(resp[0].(string))); err != nil {
 		return nil, err
 	}
+	// decode retried count
+	val, err := strconv.ParseInt(resp[1].(string), 10, 32)
+	if err != nil {
+		return nil, err
+	}
+	j.RetriedCount = int32(val)
 	return j, nil
 }
 
 // Retry resignal the job
 func (r *RedisQueue) Retry(j *Job) error {
 	if err := r.client.LPush(MakeQueueName(r.name), MakeJobKey(r.name, j.ID)).Err(); err != nil {
+		return err
+	}
+	// increment counts of retried field
+	if err := r.client.HIncrBy(MakeJobKey(r.name, j.ID), FieldRetried, 1).Err(); err != nil {
 		return err
 	}
 	return nil
