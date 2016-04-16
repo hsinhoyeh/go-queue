@@ -3,13 +3,24 @@ package queue
 import (
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
+	"gopkg.in/redis.v3"
 )
 
+func newNamedRedisQueue(queueName string) Queue {
+	client := redis.NewClient(&redis.Options{
+		Addr:         ":6379",
+		DialTimeout:  5 * time.Second,
+		ReadTimeout:  30 * time.Second,
+		WriteTimeout: 30 * time.Second,
+	})
+	return NewNamedRedisQueue(client, queueName)
+}
+
 func TestQueue(t *testing.T) {
-	rQueue, err := NewRedisQueueFromEndpoint("localhost:6379")
-	assert.NoError(t, err)
+	rQueue := newNamedRedisQueue("testq")
 
 	totalJobs := jobs()
 	for _, j := range totalJobs {
@@ -33,17 +44,8 @@ func TestQueue(t *testing.T) {
 	assert.True(t, reflect.DeepEqual(totalJobs, gotJobs))
 }
 
-func TestDequeNoJob(t *testing.T) {
-	rQueue, err := NewRedisQueueFromEndpoint("localhost:6379")
-	assert.NoError(t, err)
-
-	_, err = rQueue.Dequeue()
-	assert.Equal(t, ErrNoJob, err)
-}
-
 func TestRetryJobs(t *testing.T) {
-	rQueue, err := NewRedisQueueFromEndpoint("localhost:6379")
-	assert.NoError(t, err)
+	rQueue := newNamedRedisQueue("retryqueue")
 
 	totalJobs := jobs()
 	for _, j := range totalJobs {

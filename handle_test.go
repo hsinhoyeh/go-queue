@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	"gopkg.in/redis.v3"
 )
 
 type sentenceHandler struct {
@@ -19,13 +18,7 @@ func (s *sentenceHandler) Handle(j *Job) JobResult {
 }
 
 func TestSentence(t *testing.T) {
-	client := redis.NewClient(&redis.Options{
-		Addr:         "localhost:6379",
-		DialTimeout:  5 * time.Second,
-		ReadTimeout:  30 * time.Second,
-		WriteTimeout: 30 * time.Second,
-	})
-	rQueue := NewNamedRedisQueue(client, "sentence")
+	rQueue := newNamedRedisQueue("sentence")
 
 	s := &sentenceHandler{}
 	w := NewDefaultWorker(rQueue, s)
