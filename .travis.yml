@@ -1,13 +1,20 @@
 language: go
+sudo: false
+env:
+  global:
+    COVERALLS_TOKEN: HkQoxsX9LKKYv86j2NR7UviJZRnJT6nFF
 go:
   - 1.6
-env:
-  - "PATH=/home/travis/gopath/bin:$PATH"
 before_install:
-  - go get github.com/mitchellh/gox
-  - go get github.com/axw/gocov/gocov
   - go get github.com/mattn/goveralls
-  - go get code.google.com/p/go.tools/cmd/cover
+  - go get golang.org/x/tools/cmd/cover
+  - go get github.com/mattn/goveralls
+  - go get github.com/golang/lint/golint
+  - go get github.com/GeertJohan/fgt
 script:
-  - go test -v -covermode=count -coverprofile=coverage.out ./...
-  - goveralls -coverprofile=coverage.out -service travis-ci -repotoken $COVERALLS_TOKEN
+  - go vet ./...
+  #- fgt golint ./...
+  - go test -v -coverprofile=coverage.out ./...
+  - $HOME/gopath/bin/goveralls -service=travis-ci -coverprofile=coverage.out
+services:
+  - redis-server
