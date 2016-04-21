@@ -68,6 +68,15 @@ type RedisQueue struct {
 	name   string
 }
 
+// NamedQueueFactory is a factory method used to create redis queue with namespces
+type NamedQueueFactory func(name string) *RedisQueue
+
+func NewNamedQueueFactory(client *redis.Client) NamedQueueFactory {
+	return NamedQueueFactory(func(name string) *RedisQueue {
+		return NewNamedRedisQueue(client, name)
+	})
+}
+
 // NewRedisQueue creates and returns an instance of *RedisQueue
 func NewRedisQueue(client *redis.Client) *RedisQueue {
 	return &RedisQueue{
