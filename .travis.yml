@@ -5,6 +5,10 @@ env:
     COVERALLS_TOKEN: HkQoxsX9LKKYv86j2NR7UviJZRnJT6nFF
 go:
   - 1.6
+addons:
+  apt:
+    packages:
+       - redis-server
 before_install:
   - go get github.com/mattn/goveralls
   - go get golang.org/x/tools/cmd/cover
