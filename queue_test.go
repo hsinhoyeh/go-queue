@@ -1,6 +1,7 @@
 package queue
 
 import (
+	"fmt"
 	"reflect"
 	"testing"
 	"time"
@@ -48,6 +49,7 @@ func TestNoJobDequeue(t *testing.T) {
 	rQueue := newNamedRedisQueue("nojobqueue")
 	_, err := rQueue.Dequeue()
 	assert.IsType(t, ErrNoJob, err)
+	fmt.Println("err:%v", err)
 }
 
 func TestRetryJobs(t *testing.T) {
