@@ -44,6 +44,12 @@ func TestQueue(t *testing.T) {
 	assert.True(t, reflect.DeepEqual(totalJobs, gotJobs))
 }
 
+func TestNoJobDequeue(t *testing.T) {
+	rQueue := newNamedRedisQueue("nojobqueue")
+	_, err := rQueue.Dequeue()
+	assert.IsType(t, ErrNoJob, err)
+}
+
 func TestRetryJobs(t *testing.T) {
 	rQueue := newNamedRedisQueue("retryqueue")
 
