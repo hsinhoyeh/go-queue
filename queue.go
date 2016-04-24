@@ -128,7 +128,7 @@ func (r *RedisQueue) Enqueue(j *Job) error {
 }
 
 var (
-	dequeTimeout = 3 * time.Second
+	dequeTimeout = 1 * time.Second
 
 	ErrNoJob = errors.New("no job")
 )
